@@ -5,6 +5,8 @@ import socket
 import sys
 import time
 import threading
+import logging
+
 
 def initServer(myport):
     server = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -42,9 +44,19 @@ def parseRaw(rawreq):
     data = "\r\n".join(tmp[n+1:])
     return tmp[0],meta,data
 
+def rewriteStatus(status):
+    method,res,ty = status.split(" ")
+    res_result = "/"
+    try:
+        tmp1 = res[res.index("//")+2:]
+        res_result = tmp1[tmp1.index("/"):]
+    except ValueError:pass
+    return "%s %s %s" %(method,res_result,ty)
+
 def rewriteHeader(rawreq,rule):
     result = ""
     status,meta,data = parseRaw(rawreq)
+    status = rewriteStatus(status)
 
     for k in rule.keys():
         meta[k] = rule[k]
@@ -61,15 +73,16 @@ def initQuery(host,port):
     s.connect((addr,port))
     return s
 
-
-
-
-def controller(client,info):
+def controller(client,info,addr,port):
 
     rawreq = readRR(client,0.1)
-    req    = rewriteHeader(rawreq,rewriterule)
+    try:
+        req    = rewriteHeader(rawreq,rewriterule)
+    except:
+        client.close()
+        return
 
-    s = initQuery(upper_proxy,upper_proxy_port)
+    s = initQuery(addr,port)
     s.sendall(req)
     response = readRR(s,0.7)
     s.close()
@@ -79,26 +92,24 @@ def controller(client,info):
 
     return
 
-
-
-def main(myport,rewriterule,upper_proxy,upper_proxy_port):
+def main(myport,rewriterule,addr,port):
     server = initServer(myport)
     try:
         while True:
             client , info = server.accept()
-
-            th_controller = threading.Thread(target=controller,args=(client,info))
+            th_controller = threading.Thread(target=controller,args=(client,info,addr,port))
             th_controller.start()
-
     except KeyboardInterrupt:
         server.close()
     return
 
 
 if __name__ == "__main__":
-    rewriterule = {"Host": "hogehoge.jp"}
+    rewriterule = {"User-Agent": "Chrome"}
     myport = 12345
-    upper_proxy = "proxy.exmaple.jp"
-    upper_proxy_port = 8080
-    main(myport,rewriterule,upper_proxy,upper_proxy_port)
+
+    addr = "www.sie.dendai.ac.jp"
+    port = 80
+
+    main(myport,rewriterule,addr,port)
 
